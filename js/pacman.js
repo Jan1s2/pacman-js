@@ -9,7 +9,6 @@ let pacman;
 let ghosts = [];
 
 let ghostImgs = [];
-let theShader;
 
 /*let position = {
     baseSize: 0,
@@ -318,7 +317,11 @@ class Pacman extends Entity {
 }
 
 function lose() {
-
+    textSize(64);
+    textAlign(CENTER, CENTER);
+    text('test');
+    noLoop();
+    draw();
 }
 
 function draw() {
@@ -343,7 +346,7 @@ function draw() {
     for(var i = 0; i <ghosts.length; i++) {
         ghosts[i].draw();
         if(arrayEquals(ghosts[i].getCoords(), pacman.getCoords())) {
-            noLoop();
+            lose();
         }
     }
 }
