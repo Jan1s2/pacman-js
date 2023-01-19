@@ -1,14 +1,20 @@
 let grid = [];
 let cols = 28;
 let rows = 31;
-let pointsRemaining = 0; 
+let pointsRemaining = 0;
+let score = 0;
+let frightLength = 7.5 * 60;
+
 
 let cellSize;
 
 let pacman;
 let ghosts = [];
 
+let roboto;
 let ghostImgs = [];
+
+let fright;
 
 /*let position = {
     baseSize: 0,
@@ -18,7 +24,6 @@ let ghostImgs = [];
         return this.disp
     }
 };*/
-
 
 function arrayEquals(a, b) {
     return a.length === b.length && a.every((val, index) => val === b[index]);
@@ -66,6 +71,7 @@ class Cell {
         this.pacman = false;
         this.point = false;
         this.powerup = false;
+        this.powerState = false;
     }
     getSolid() {
         return this.solid;
@@ -78,7 +84,7 @@ class Cell {
         this.solid = false;
     }
     setPoint(point = true) {
-        if(point && !this.point) {
+        if (point && !this.point) {
             pointsRemaining++;
         } else if (!point && this.point) {
             pointsRemaining--;
@@ -92,6 +98,15 @@ class Cell {
         this.setPoint();
         this.setPath();
     }
+    getPowerUp() {
+        return this.powerup;
+    }
+    setPowerUp(p = true) {
+        if (typeof p === "boolean") {
+            this.setPoint(!p);
+            this.powerup = p;
+        }
+    }
     getX() {
         return this.x;
     }
@@ -102,24 +117,43 @@ class Cell {
         return [this.getX(), this.getY()];
     }
     draw() {
-        //noStroke();
-        if (this.solid) {
+        noStroke();
+        if (this.getSolid()) {
             //noStroke();
-            stroke(51);
+            //    stroke(51);
             fill(55, 0, 0);
         } else {
-            stroke(51);
+            //    stroke(51);
             fill(150);
         }
         rectMode(CORNER);
         rect(...this.getPosition(), cellSize, cellSize);
-        if (this.point) {
-            fill(255, 255, 0);
+        if (this.getPoint()) {
+            fill(255, 255, 255);
             circle(
                 this.getX() + cellSize * 0.5,
                 this.getY() + cellSize * 0.5,
                 cellSize / 4
             );
+        }
+        if (this.powerup) {
+            fill(255, 255, 0);
+            if (frameCount % 30 == 0) {
+                this.powerState = !this.powerState;
+            }
+            if (this.powerState) {
+                circle(
+                    this.getX() + cellSize * 0.5,
+                    this.getY() + cellSize * 0.5,
+                    cellSize * 0.85
+                );
+            } else {
+                circle(
+                    this.getX() + cellSize * 0.5,
+                    this.getY() + cellSize * 0.5,
+                    cellSize / 2
+                );
+            }
         }
     }
 }
@@ -156,7 +190,7 @@ class Entity {
             if (this.getXCoords() == 0) {
                 this.x = floor(cols * cellSize - cellSize * 1.5);
             }
-            if (this.getXCoords() == (cols - 1)) {
+            if (this.getXCoords() == cols - 1) {
                 this.x = floor(cellSize * 1.5);
             }
             if (
@@ -208,11 +242,13 @@ class Entity {
 }
 
 class Ghost extends Entity {
-    constructor(x, y) {
+    constructor(x, y, texture) {
         super(floor(x + cellSize * 0.5), floor(y + cellSize * 0.5));
         this.dir;
         this.canContinue;
         this.baseSpeed = 2;
+        this.texture = texture;
+        this.invinc = 0;
     }
     move() {
         if (
@@ -240,8 +276,18 @@ class Ghost extends Entity {
                 break;
         }
     }
+    respawn() {
+        this.invinc = frightLength;
+        this.toInitialPos();
+    }
+    getInvincibility() {
+        return this.invinc > 0;
+    }
+    resetInvincibility() {
+        this.invinc = 0;
+    }
     getSpeed() {
-        if(!this.getPower()) {
+        if (!pacman.getPower() && !this.getInvincibility()) {
             return this.baseSpeed;
         } else {
             return 0.5 * this.baseSpeed;
@@ -249,8 +295,16 @@ class Ghost extends Entity {
     }
     draw() {
         this.move();
-        fill(99, 99, 0);
+        if(this.invinc > 0) {
+            this.invinc--;
+        }
+        //fill(99, 99, 0);
         rectMode(CENTER);
+        if(pacman.getPower() && !this.getInvincibility()) {
+            texture(fright);
+        } else {
+            texture(this.texture);
+        }
         rect(this.x, this.y, cellSize * 0.8, cellSize * 0.8);
     }
 }
@@ -260,6 +314,10 @@ class Pacman extends Entity {
         super(floor(x + cellSize * 0.5), floor(y + cellSize * 0.5));
         this.dir = [];
         this.oldDir = [];
+        this.baseSpeed = 2;
+    }
+    getSpeed() {
+        return this.baseSpeed;
     }
     move() {
         let dir = [];
@@ -282,20 +340,20 @@ class Pacman extends Entity {
             this.dir = dir;
         }
         if (this.dir.length != 0) {
-            if (this.changePos(...this.dir, 10)) {
+            if (this.changePos(...this.dir, this.getSpeed())) {
                 this.oldDir = this.dir;
             } else if (this.oldDir.length != 0) {
                 this.dir = this.oldDir;
-                this.changePos(...this.dir, 10);
+                this.changePos(...this.dir, this.getSpeed());
             }
         }
     }
     getDir() {
-        if(this.dir[0] == 1) {
+        if (this.dir[0] == 1) {
             return 0;
-        } else if(this.dir[1] == -1) {
+        } else if (this.dir[1] == -1) {
             return 1;
-        } else if(this.dir[0] == -1) {
+        } else if (this.dir[0] == -1) {
             return 2;
         } else if (this.dir[1] == 1) {
             return 3;
@@ -305,23 +363,58 @@ class Pacman extends Entity {
     }
     draw() {
         this.move();
-        grid[this.getYCoords()][this.getXCoords()].setPoint(false);
+        let tile = grid[this.getYCoords()][this.getXCoords()];
+        if(this.power > 0) {
+            this.power--;
+        }
+        if(tile.getPoint()) {
+            tile.setPoint(false);
+            score += 10;
+        }
+        if(tile.getPowerUp()) {
+            tile.setPowerUp(false);
+            this.power = frightLength;
+            for(var i = 0; i < ghosts.length; i++) {
+                ghosts[i].resetInvincibility();
+            }
+            score += 50;
+        }
         fill(255, 255, 0);
         noStroke();
         //rectMode(CENTER);
-        let mouthSize = (abs(sin(frameCount / 5)) / 2) + 0.25;
+        //let mouthSize = abs(sin(frameCount / 5)) / 2 + 0.25;
+        let mouthSize = (sin(frameCount /5) + 1) / 4 + 0.25;
         let rotation = this.getDir() * HALF_PI;
-        arc(this.x, this.y, cellSize * 0.8, cellSize * 0.8, rotation + mouthSize, rotation + TWO_PI - mouthSize, PIE);
-
+        arc(
+            this.x,
+            this.y,
+            cellSize * 0.8,
+            cellSize * 0.8,
+            rotation + mouthSize,
+            rotation + TWO_PI - mouthSize,
+            PIE
+        );
     }
 }
 
 function lose() {
     textSize(64);
     textAlign(CENTER, CENTER);
-    text('test');
-    noLoop();
-    draw();
+    fill(255, 0, 0);
+    stroke(0);
+    textFont(roboto);
+    let s = `Game Over\nFinal score: ${score}`;
+    text(s, (cellSize * cols) / 2, (cellSize * rows) / 2);
+}
+
+function win() {
+    textSize(64);
+    textAlign(CENTER, CENTER);
+    fill(0, 255, 0);
+    stroke(0);
+    textFont(roboto);
+    let s = `You have won!\nFinal score: ${score}`;
+    text(s, (cellSize * cols) / 2, (cellSize * rows) / 2);
 }
 
 function draw() {
@@ -343,15 +436,25 @@ function draw() {
     }
     //test.draw();
     pacman.draw();
-    for(var i = 0; i <ghosts.length; i++) {
+    for (var i = 0; i < ghosts.length; i++) {
         ghosts[i].draw();
-        if(arrayEquals(ghosts[i].getCoords(), pacman.getCoords())) {
-            lose();
+        if (arrayEquals(ghosts[i].getCoords(), pacman.getCoords())) {
+            if (pacman.getPower() && !ghosts[i].getInvincibility()) {
+                ghosts[i].respawn();
+                score += 200;
+            } else {
+                lose();
+                noLoop();
+            }
         }
+    }
+    if(pointsRemaining == 0) {
+        win();
+        noLoop();
     }
 }
 function windowResized() {
-    if(document.fullscreenElement) {
+    if (document.fullscreenElement) {
         resizeCanvas(windowWidth, windowHeight);
     } else {
         resizeCanvas(cols * cellSize, rows * cellSize);
@@ -362,6 +465,7 @@ function setup() {
     cellSize = floor(min(displayHeight, displayWidth) / 40);
     //canvas = createCanvas(cols * cellSize, rows * cellSize, WEBGL);
     canvas = createCanvas(cols * cellSize, rows * cellSize, WEBGL);
+    //canvas = createCanvas(cols * cellSize, rows * cellSize)
     console.log(displayWidth);
     for (var i = 0; i < rows; i++) {
         grid[i] = [];
@@ -372,8 +476,8 @@ function setup() {
     //test = new Ghost(cellSize * 2, cellSize);
 
     pacman = new Pacman(cellSize * 13, cellSize * 23);
-    for(var i = 0; i < 4; i++) {
-        ghosts[i] = new Ghost(cellSize * (12 + i), cellSize * 11);
+    for (var i = 0; i < 4; i++) {
+        ghosts[i] = new Ghost(cellSize * (12 + i), cellSize * 11, ghostImgs[i]);
     }
     /*    for(var i = 0; i < cols; i++) {
             grid[0][i].setSolid();
@@ -434,7 +538,18 @@ function setup() {
             }
         }
     }
+    grid[3][1].setPowerUp();
+    grid[3][cols - 2].setPowerUp();
+    grid[23][1].setPowerUp();
+    grid[23][cols - 2].setPowerUp();
+    frameRate(60);
 }
 function preload() {
-    ghostImgs[0] = loadImage('img/red.png');
+    ghostImgs[0] = loadImage("img/red.png");
+    ghostImgs[1] = loadImage("img/aqua.png");
+    ghostImgs[2] = loadImage("img/pink.png");
+    ghostImgs[3] = loadImage("img/orange.png");
+    fright = loadImage("img/fright.png");
+
+    roboto = loadFont("fonts/Roboto-Regular.ttf");
 }
